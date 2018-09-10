@@ -1,18 +1,19 @@
 language: emacs-lisp
-before_install:
-  - curl -fsSkL https://gist.github.com/rejeep/7736123/raw | sh
-  - export PATH="/home/travis/.cask/bin:$PATH"
-  - export PATH="/home/travis/.evm/bin:$PATH"
-  - evm install $EVM_EMACS --use
-  - cask
+sudo: no
+matrix:
+  fast_finish: true
+  allow_failures:
+    - env: EVM_EMACS=emacs-git-snapshot-travis
 env:
-  - EVM_EMACS=emacs-23.4-bin
-  - EVM_EMACS=emacs-24.1-bin
-  - EVM_EMACS=emacs-24.2-bin
-  - EVM_EMACS=emacs-24.3-bin
-  - EVM_EMACS=emacs-25-bin
-  - EVM_EMACS=emacs-26-bin
-  - EVM_EMACS=emacs-27-bin
+  - EVM_EMACS=emacs-24.3-travis
+  - EVM_EMACS=emacs-24.4-travis
+  - EVM_EMACS=emacs-24.5-travis
+  - EVM_EMACS=emacs-25.1-travis
+  - EVM_EMACS=emacs-git-snapshot-travis
+before_install:
+ - curl -fsSkL https://gist.github.com/rejeep/ebcd57c3af83b049833b/raw > travis.sh && source ./travis.sh
+ - evm install "$EVM_EMACS" --use --skip
+install:
+  - make install
 script:
-  - emacs --version
   - make test
