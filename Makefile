@@ -3,12 +3,16 @@ EMACS ?= emacs
 
 all: test
 
-test: unit
+test:
+	${CASK} exec ert-runner
 
 unit:
-	${CASK} exec ert-runner
+	${CASK} exec ert-runner test/orgtt-test.el
+
+integration:
+	${CASK} exec ert-runner test/orgtt-integration-test.el
 
 install:
 	${CASK} install
 
-.PHONY: all test unit ecukes install
+.PHONY: all test unit integration install
