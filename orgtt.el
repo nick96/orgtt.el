@@ -47,6 +47,7 @@
 ;;; Code:
 
 (require 'cl-lib)
+(require 's)
 
 (defgroup orgtt nil
   "Customisation group for orgtt."
@@ -62,14 +63,45 @@
   :type 'alist
   :group 'orgtt)
 
-(defsubst orgtt--to-bool (x)
-  "Convert X to a 'boolean' (t/nil).
+(defun orgtt--to-bool (x)
+  "Convert X to a boolean (t/nil).
 
 We want to convert everything to booleans because it will make
 them easier to work with.  Emacs Lisp has short circuit
 evaluation for its functions like `and' and `or', if we're not
 using t or nil then we will get funny return values."
-  (if x t nil))
+  (cond ((booleanp x) x)
+	((and (stringp x) (or (string-equal x "t") (string-equal x "nil")))
+	 (string-equal x "t"))
+	((and (numberp x) (or (= x 1) (= x 0))) (= x 1))
+	(t (user-error (s-join " " '("You are trying to convert something that is"
+				"not the strings 't' or 'nil', the digits 1 or 0, or a"
+				"boolean.  I have stopped because the results could be"
+				"confusing"))))))
+
+(defun orgtt--pad-list (l n pad)
+  "Left pad a list L so it has length N, list is filled with PAD."
+  (if (> n (length l))
+      (cl-concatenate 'list (make-list (- n (length l)) pad) l)
+    l))
+
+(defun orgtt--get-valuations (n)
+  "Return a list containg a list of all valuations for N variables."
+  (mapcar #'(lambda (l) (mapcar #'orgtt--to-bool (orgtt--pad-list l n 0)))
+	  (cl-loop for i from 0 upto (- (expt 2 n) 1) collect (orgtt--to-binary-list i))))
+
+(defun orgtt--string-head (s)
+  "Get the first character in S as a string."
+  (s-left 1 s))
+(defun orgtt--string-tail (s)
+  "Get all but the first characters in a string S."
+  (s-right (-1 (length s)) s))
+
+(defun orgtt--get-vars (formula)
+  "Get the variables in FORMULA."
+  (s-split "" (cl-remove-if #'(lambda (c) (or (< c 65) (> c 90)))
+			    (s-upcase formula))
+	   t))
 
 (defun orgtt--negate (x)
   "Negate X."
@@ -97,12 +129,6 @@ using t or nil then we will get funny return values."
 	(y (orgtt--to-bool y)))
     (or (and (not x) y) (and x (not y)))))
 
-(defun orgtt--get-vars (formula)
-  "Get the variables in FORMULA."
-  (s-split "" (cl-remove-if #'(lambda (c) (or (< c 65) (> c 90)))
-			    (s-upcase formula))
-	   t))
-
 (defun orgtt--build-table-row (elements)
   "Build a table row for `org-mode' containing ELEMENTS."
   (if (null elements)
@@ -117,32 +143,43 @@ using t or nil then we will get funny return values."
 			     (t (nconc (orgtt--to-binary-list (truncate n 2))
 				       (list (mod n 2))))))
 
-(defun orgtt--pad-list (l n pad)
-  "Pad a list L so it has length N, list is filled with PAD."
-  (if (> n (length l))
-      (cl-concatenate 'list (make-list (- n (length l)) pad) l)
-    l))
-
-(defun orgtt--get-valuations (n)
-  "Return a list containg a list of all valuations for N variables."
-  (mapcar #'(lambda (l) (orgtt--pad-list l n 0))
-	  (cl-loop for i from 0 upto (- (expt 2 n) 1) collect (orgtt--to-binary-list i)))):
-
 (defun orgtt--build-table-header (vars formula)
   "Build the header for a truth table for VARS for FORMULA."
   (orgtt--build-table-row (reverse (cons formula (reverse vars)))))
 
 (defun orgtt--build-table-body (vars)
   "Build the body for a truth tables with VARS."
-    (s-join "\n" (mapcar #'orgtt--build-table-row (orgtt--get-valuations (length vars)))))
+  (s-join "\n" (mapcar #'(lambda (xs)
+			   (s-concat (orgtt--build-table-row xs) " |"))
+		       (orgtt--get-valuations (length vars)))))
 
-;; TODO: Draw state machine to model parsing of formula
-(defun orgtt--build-orgtbl-formula (formula)
-  "Build the orgtbl formula to calculate FORMULA outcomes."
-  formula)
+(defun orgtt--build-orgtbl-formula-aux (cursor rest connectives)
+  "`orgtt--build-orgtbl-formula' helper, takes CURSOR, REST and CONNECTIVES.
+
+This function does the majority of the work for
+`orgtt--build-orgtbl-formula' by translating a given formula into
+one which can be used by orgtbl."
+  (cond (;; Add the next part of the formula to the cursor if the
+	 ;; cursor string is a substring of multiple keys in the
+	 ;; alist so that we can narrow down the possible
+	 ;; connectives.
+	 (orgtt--multiple-pos-keys cursor connectives)
+	 (orgtt--build-orgtbl-formula-aux (concat cursor (orgtt--string-head rest))
+					  (orgtt--string-tail rest)
+					  connectives))))
+
+(defun orgtt--build-orgtbl-formula (formula &optional connective-alist)
+  "Build the orgtbl formula to calculate FORMULA outcomes with CONNECTIVE-ALIST."
+  (let ((connective-list (or connective-alist orgtt-connective-alist)))))
 
 (defun orgtt--create-table (formula)
   "Create and return the truth table for FORMULA as a string."
+  (let ((vars (orgtt--get-vars formula)))
+    (s-join "\n" (list (orgtt--build-table-header vars formula)
+		       (orgtt--build-table-body vars)))))
+
+(defun orgtt--create-table-and-solve (formula)
+  "Create and return the fully completed truth table for FORMULA as a string."
   (let ((vars (orgtt--get-vars formula)))
     (s-join "\n" (list (orgtt--build-table-header vars formula)
 		       (orgtt--build-table-body vars)
@@ -152,11 +189,21 @@ using t or nil then we will get funny return values."
 
 ;;;###autoload
 (defun orgtt-create-table (formula)
+  "Insert the truth table for FORMULA.
+
+Formula should be made up of variables (letters) and connectives
+defined in `orgtt-connective-alist'."
+  (interactive "sFormula: ")
+  (insert (orgtt--create-table formula)))
+
+;;;###autoload
+(defun orgtt-create-table-and-solve (formula)
   "Insert a filled out truth table for FORMULA.
 
 Formula should be made up of variables (letters) and connectives
 defined in `orgtt-connective-alist'."
-  (insert (orgtt--create-table formula)))
+  (interactive "sFormula: ")
+  (insert (orgtt--create-table-and-solve formula)))
 
 (provide 'orgtt)
 ;;; orgtt.el ends here
