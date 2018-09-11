@@ -1,0 +1,10 @@
+| A   | B   | C   | A -> (B . C) |
+|-----+-----+-----+--------------|
+| nil | nil | nil |              |
+| nil | nil | t   |              |
+| nil | t   | nil |              |
+| nil | t   | t   |              |
+| t   | nil | nil |              |
+| t   | nil | t   |              |
+| t   | t   | nil |              |
+| t   | t   | t   |              |

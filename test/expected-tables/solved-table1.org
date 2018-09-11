@@ -1,0 +1,7 @@
+| A   | B   | A + B |
+|-----+-----+-------|
+| nil | nil | nil   |
+| nil | t   | t     |
+| t   | nil | t     |
+| t   | t   | t     |
+#+TBLFM: $3='(orgtt--land $1 $2)

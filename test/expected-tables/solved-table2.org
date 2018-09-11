@@ -1,0 +1,11 @@
+| A   | B   | C   | A -> (B . C) |
+|-----+-----+-----+--------------|
+| nil | nil | nil | t            |
+| nil | nil | t   | t            |
+| nil | t   | nil | t            |
+| nil | t   | t   | t            |
+| t   | nil | nil | nil          |
+| t   | nil | t   | nil          |
+| t   | t   | nil | nil          |
+| t   | t   | t   | t            |
+#+TBLFM: $4='(orgtt--implication $1 (orgtt--land $2 $3))
