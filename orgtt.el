@@ -48,6 +48,7 @@
 
 (require 'cl-lib)
 (require 's)
+(require 'org-table)
 
 (defgroup orgtt nil
   "Customisation group for orgtt."
@@ -61,6 +62,11 @@
 				    ("<+>" . orgtt--xor))
   "Associative list of allowed connective in formulae."
   :type 'alist
+  :group 'orgtt)
+
+(defcustom orgtt-use-binary nil
+  "Display boolean values as 1 or 0 in tables."
+  :type 'boolean
   :group 'orgtt)
 
 (defun orgtt--to-bool (x)
@@ -78,6 +84,12 @@ using t or nil then we will get funny return values."
 				"not the strings 't' or 'nil', the digits 1 or 0, or a"
 				"boolean.  I have stopped because the results could be"
 				"confusing"))))))
+
+(defun orgtt--bool-to-binary (b)
+  "Convert a boolean value B to binary (i.e. t -> 1, nil -> 0)."
+  (if (not (booleanp b))
+      (user-error "Cannot convert non-boolean type to binary")
+    (if b 1 0)))
 
 (defun orgtt--pad-list (l n pad)
   "Left pad a list L so it has length N, list is filled with PAD."
@@ -102,6 +114,20 @@ using t or nil then we will get funny return values."
   (s-split "" (cl-remove-if #'(lambda (c) (or (< c 65) (> c 90)))
 			    (s-upcase formula))
 	   t))
+
+(defun orgtt--to-binary-list (n)
+  "Convert N to list of its binary digits."
+  (cond ((= n 0) (list 0))
+	((= n 1) (list 1))
+	(t (nconc (orgtt--to-binary-list (truncate n 2))
+		  (list (mod n 2))))))
+
+(defun orgtt--org-table-align-string (s)
+  "Align a string representation of a table S using `org-table-align'."
+  (with-temp-buffer
+    (insert s)
+    (org-table-align)
+    (buffer-substring-no-properties (point-min) (point-max))))
 
 (defun orgtt--negate (x)
   "Negate X."
@@ -136,22 +162,19 @@ using t or nil then we will get funny return values."
     (concat (format "| %s " (car elements))
 	    (orgtt--build-table-row (cdr elements)))))
 
-(defun orgtt--to-binary-list (n)
-  "Convert N to list of its binary digits."
-  (cond ((= n 0) (list 0))
-			     ((= n 1) (list 1))
-			     (t (nconc (orgtt--to-binary-list (truncate n 2))
-				       (list (mod n 2))))))
 
 (defun orgtt--build-table-header (vars formula)
   "Build the header for a truth table for VARS for FORMULA."
   (orgtt--build-table-row (reverse (cons formula (reverse vars)))))
 
-(defun orgtt--build-table-body (vars)
-  "Build the body for a truth tables with VARS."
-  (s-join "\n" (mapcar #'(lambda (xs)
-			   (s-concat (orgtt--build-table-row xs) " |"))
-		       (orgtt--get-valuations (length vars)))))
+(defun orgtt--build-table-body (vars &optional binaryp)
+  "Build the body for a truth tables with VARS in binary depending BINARYP."
+    (s-join "\n" (mapcar #'(lambda (xs)
+			     (s-concat (orgtt--build-table-row
+					(if binaryp
+					    (mapcar #'orgtt--bool-to-binary xs)
+					xs)) " |"))
+			 (orgtt--get-valuations (length vars)))))
 
 (defun orgtt--build-orgtbl-formula-aux (cursor rest connectives)
   "`orgtt--build-orgtbl-formula' helper, takes CURSOR, REST and CONNECTIVES.
@@ -172,20 +195,28 @@ one which can be used by orgtbl."
   "Build the orgtbl formula to calculate FORMULA outcomes with CONNECTIVE-ALIST."
   (let ((connective-list (or connective-alist orgtt-connective-alist)))))
 
-(defun orgtt--create-table (formula)
-  "Create and return the truth table for FORMULA as a string."
-  (let ((vars (orgtt--get-vars formula)))
-    (s-join "\n" (list (orgtt--build-table-header vars formula)
-		       (orgtt--build-table-body vars)))))
+(defun orgtt--build-table-divider (n)
+  "Build a divider for N variables to go between the header and the body."
+  (s-concat "|" (s-repeat (- n 1) "-+") "-|"))
 
-(defun orgtt--create-table-and-solve (formula)
-  "Create and return the fully completed truth table for FORMULA as a string."
+(defun orgtt--create-table (formula &optional binaryp)
+  "Create and return the truth table for FORMULA as a string in binary if BINARYP."
   (let ((vars (orgtt--get-vars formula)))
-    (s-join "\n" (list (orgtt--build-table-header vars formula)
-		       (orgtt--build-table-body vars)
-		       (format "TBLFM: $%d=%s"
-			       (+ (length vars) 1)
-			       (orgtt--build-orgtbl-formula formula))))))
+    (orgtt--org-table-align-string
+     (s-join "\n" (list (orgtt--build-table-header vars formula)
+			(orgtt--build-table-divider (length vars))
+			(orgtt--build-table-body vars binaryp))))))
+
+(defun orgtt--create-table-and-solve (formula &optional binaryp)
+  "Create the fully completed truth table for FORMULA as a string, in binary if BINARYP."
+  (let ((vars (orgtt--get-vars formula)))
+    (orgtt--org-table-align-string
+     (s-join "\n" (list (orgtt--build-table-header vars formula)
+			(orgtt--build-table-divider (length vars))
+			(orgtt--build-table-body vars binaryp)
+			(format "TBLFM: $%d=%s"
+				(+ (length vars) 1)
+				(orgtt--build-orgtbl-formula formula)))))))
 
 ;;;###autoload
 (defun orgtt-create-table (formula)
@@ -194,7 +225,7 @@ one which can be used by orgtbl."
 Formula should be made up of variables (letters) and connectives
 defined in `orgtt-connective-alist'."
   (interactive "sFormula: ")
-  (insert (orgtt--create-table formula)))
+  (insert (orgtt--create-table formula orgtt-use-binary)))
 
 ;;;###autoload
 (defun orgtt-create-table-and-solve (formula)
@@ -203,7 +234,7 @@ defined in `orgtt-connective-alist'."
 Formula should be made up of variables (letters) and connectives
 defined in `orgtt-connective-alist'."
   (interactive "sFormula: ")
-  (insert (orgtt--create-table-and-solve formula)))
+  (insert (orgtt--create-table-and-solve formula orgtt-use-binary)))
 
 (provide 'orgtt)
 ;;; orgtt.el ends here
