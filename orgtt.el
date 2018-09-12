@@ -44,11 +44,16 @@
 ;; You can add your own syntax and define your own connectives by
 ;; adding a mapping to `orgtt-connective-alist'.
 
+;;; TODO:
+
+;; - Fix table formatting (first character of divider is a '+' not a '|')
+
 ;;; Code:
 
 (require 'cl-lib)
 (require 's)
 (require 'org-table)
+(require 'dash)
 
 (defgroup orgtt nil
   "Customisation group for orgtt."
@@ -111,9 +116,9 @@ using t or nil then we will get funny return values."
 
 (defun orgtt--get-vars (formula)
   "Get the variables in FORMULA."
-  (s-split "" (cl-remove-if #'(lambda (c) (or (< c 65) (> c 90)))
-			    (s-upcase formula))
-	   t))
+  (-distinct (-sort 's-less-p (s-split "" (cl-remove-if #'(lambda (c) (or (< c 65) (> c 90)))
+					     (s-upcase formula))
+				       t))))
 
 (defun orgtt--to-binary-list (n)
   "Convert N to list of its binary digits."
@@ -176,24 +181,21 @@ using t or nil then we will get funny return values."
 					xs)) " |"))
 			 (orgtt--get-valuations (length vars)))))
 
-(defun orgtt--build-orgtbl-formula-aux (cursor rest connectives)
-  "`orgtt--build-orgtbl-formula' helper, takes CURSOR, REST and CONNECTIVES.
+(defun orgtt--convert-to-prefix-notation (formula)
+  "Convert FORMULA to prefix notation.")
 
-This function does the majority of the work for
-`orgtt--build-orgtbl-formula' by translating a given formula into
-one which can be used by orgtbl."
-  (cond (;; Add the next part of the formula to the cursor if the
-	 ;; cursor string is a substring of multiple keys in the
-	 ;; alist so that we can narrow down the possible
-	 ;; connectives.
-	 (orgtt--multiple-pos-keys cursor connectives)
-	 (orgtt--build-orgtbl-formula-aux (concat cursor (orgtt--string-head rest))
-					  (orgtt--string-tail rest)
-					  connectives))))
+(defun orgtt--replacement-mapping (s mapping-alist)
+  "Replace occurances of keys in MAPPING-ALIST in string S with corresponding values."
+  (let ((keys (mapcar #'car mapping-alist)))
+    (dolist (key keys s)
+      (setq s (s-replace key (symbol-name (cdr (assoc key mapping-alist))) s)))))
 
 (defun orgtt--build-orgtbl-formula (formula &optional connective-alist)
   "Build the orgtbl formula to calculate FORMULA outcomes with CONNECTIVE-ALIST."
-  (let ((connective-list (or connective-alist orgtt-connective-alist)))))
+  (let ((prefix-formula (orgtt--convert-to-prefix-notation formula))
+	(sorted-connectives (sort connective-alist (lambda (x y)
+						     (> (car x) (car y))))))
+    (orgtt--replacement-mapping prefix-formula sorted-connectives)))
 
 (defun orgtt--build-table-divider (n)
   "Build a divider for N variables to go between the header and the body."
