@@ -28,7 +28,11 @@
   "Test getting all variables from a formula."
   (should (equal (orgtt--get-vars "A + B") '("A" "B")))
   (should (equal (orgtt--get-vars "B . A") '("A" "B")))
-  (should (equal (orgtt--get-vars "A + (B . A)") '("A" "B"))))
+  (should (equal (orgtt--get-vars "A + (B . A)") '("A" "B")))
+  (should (equal (orgtt--get-vars "A + B") '("A" "B")))
+  (should (equal (orgtt--get-vars "(A . B) + -(C <+> D -> (E <-> F))")
+		 '("A" "B" "C" "D" "E" "F"))))
+
 
 ;; Test the functions called for the default connectives
 (ert-deftest orgtt-test-negate-boolean ()
@@ -48,8 +52,7 @@
   (should-not (orgtt--land nil t))
   (should-not (orgtt--land nil nil)))
 
-(ert-deftest orgtt-test-land-binary ()
-  "Tests for logical and with 1s and 0s."
+
   (should (orgtt--land 1 1))
   (should-not (orgtt--land 1 0))
   (should-not (orgtt--land 0 1))
@@ -112,11 +115,6 @@
   (should-not (orgtt--xor 0 0)))
 
 ;; Test the functions for parsing the formula in its string form
-(ert-deftest orgtt-test-get-vars ()
-  "Test `orgtt--get-vars'."
-  (should (equal (orgtt--get-vars "A + B") '("A" "B")))
-  (should (equal (orgtt--get-vars "(A . B) + -(C <+> D -> (E <-> F))")
-		 '("A" "B" "C" "D" "E" "F"))))
 
 ;; Test the function used to build the truth table
 (ert-deftest orgtt-test-build-table-header ()
