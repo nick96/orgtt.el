@@ -46,7 +46,7 @@
 
 ;;; TODO:
 
-;; - Fix table formatting (first character of divider is a '+' not a '|')
+;; - Fix parsing of negations
 
 ;;; Code:
 
@@ -112,7 +112,7 @@ using t or nil then we will get funny return values."
   (s-left 1 s))
 (defun orgtt--string-tail (s)
   "Get all but the first characters in a string S."
-  (s-right (-1 (length s)) s))
+  (s-right (- (length s) 1) s))
 
 (defun orgtt--get-vars (formula)
   "Get the variables in FORMULA."
@@ -167,7 +167,6 @@ using t or nil then we will get funny return values."
     (concat (format "| %s " (car elements))
 	    (orgtt--build-table-row (cdr elements)))))
 
-
 (defun orgtt--build-table-header (vars formula)
   "Build the header for a truth table for VARS for FORMULA."
   (orgtt--build-table-row (reverse (cons formula (reverse vars)))))
@@ -182,7 +181,8 @@ using t or nil then we will get funny return values."
 			 (orgtt--get-valuations (length vars)))))
 
 (defun orgtt--convert-to-prefix-notation (formula)
-  "Convert FORMULA to prefix notation.")
+  "Convert FORMULA to prefix notation."
+  formula)
 
 (defun orgtt--replacement-mapping (s mapping-alist)
   "Replace occurances of keys in MAPPING-ALIST in string S with corresponding values."
@@ -190,12 +190,115 @@ using t or nil then we will get funny return values."
     (dolist (key keys s)
       (setq s (s-replace key (symbol-name (cdr (assoc key mapping-alist))) s)))))
 
-(defun orgtt--build-orgtbl-formula (formula &optional connective-alist)
-  "Build the orgtbl formula to calculate FORMULA outcomes with CONNECTIVE-ALIST."
-  (let ((prefix-formula (orgtt--convert-to-prefix-notation formula))
-	(sorted-connectives (sort connective-alist (lambda (x y)
-						     (> (car x) (car y))))))
-    (orgtt--replacement-mapping prefix-formula sorted-connectives)))
+(defun orgtt--skip-parened-region (formula &optional paren-count)
+  "Skip over a parenthesised region in FORMULA, keeping state with PAREN-COUNT."
+  (let ((paren-count (or paren-count 0))
+	(formula (if (listp formula)
+		     formula
+		   (s-split "" formula t))))
+    (pcase formula
+		 (`("(" . ,xs) (orgtt--skip-parened-region xs (+ paren-count 1)))
+		 (`(")" . ,xs) (if (= paren-count 1)
+				   xs
+				 (orgtt--skip-parened-region xs (- paren-count 1))))
+		 (`(,_ . ,xs) (orgtt--skip-parened-region xs paren-count)))))
+
+(defun orgtt--remove-surrounding-parens (formula)
+  "Remove parentheses surroundign FORMULA."
+  (cond ((stringp formula)
+	 (if (and (s-equals-p (s-left 1 formula) "(")
+		  (s-equals-p (s-right 1 formula) ")"))
+	     (substring formula 1 (- (length formula) 2))
+	   formula))
+	((listp formula)
+	 (if (and (s-equals-p (-first-item formula) "(")
+		 (s-equals-p (-last-item formula) ")"))
+	     (-slice formula 1 (- (length formula) 2))
+	   formula))))
+
+(defun orgtt--build-prefix-formula (formula &optional connective-alist queue connective)
+  "Convert FORMULA to prefix from with CONNECTIVE-ALIST, QUEUE and CONNECTIVE.
+
+Currently this function will not work if FROMULA is surrounded in parentheses."
+  (let ((connective-alist (or connective-alist orgtt-connective-alist))
+	(queue (or queue '()))
+	(connective (or connective ""))
+	(formula (if (stringp formula)
+		     (s-split "" formula t)
+		   formula)))
+    (pcase formula
+      ;; When we reach an openning parenthesis, this signals the start
+      ;; of a subexpression. We want to be able to use this as one of
+      ;; the arguments to the connective of the current expression, so
+      ;; we get it by calling this function on that region (it
+      ;; terminates on a ')') and adding it to the variables queue. We
+      ;; then use `orgtt--skip-parened-region' to jump over the
+      ;; subexpression we've already parse and continue parsing the
+      ;; expression.
+      (`("(" . ,xs) (progn
+		      (setq queue (-snoc queue (orgtt--build-prefix-formula xs connective-alist)))
+		      (orgtt--build-prefix-formula (orgtt--skip-parened-region xs)
+						   connective-alist queue connective)))
+      ;; A closing parenthesis signals that we've reached the end of
+      ;; the current expression. We should now have a know connective
+      ;; in the CONNECTIVE argument (known connectives are in the
+      ;; CONNECTIVE-ALIST). If this is not the case, something has
+      ;; gone wrong, so we throw an error. Otherwise, we will
+      ;; determine the arity of the the function which the connective
+      ;; maps to in CONNECTIVE-ALIST and pop that many
+      ;; variables/subexpressions off the top of QUEUE. Again, if
+      ;; queue is not long enough for this then there is a problem, so
+      ;; we throw an error. If all goes to plan, then we just create
+      ;; an expression lead by the connective function name with all
+      ;; the arguments in the appropriate order.
+      (`(")" . ,xs) (progn
+		      (let ((connective-fn (cdr (assoc connective connective-alist))))
+			(message "%s" connective-fn)
+			(if (not connective-fn)
+			    (user-error "No known connective for %S, check your formula"
+					connective)
+			  (let* ((connective-arity
+				  (length (help-function-arglist connective-fn)))
+				 (args (s-join " " (-take connective-arity queue))))
+			    (setq queue (-drop connective-arity queue))
+			    (format "(%s %s)" connective-fn args))))))
+      ;; Whitespace is not useful to us so we just ignore it.
+      ((and `(,x . ,xs) (guard (s-blank-str-p x)))
+       (orgtt--build-prefix-formula xs connective-alist queue connective))
+      ;; Capital letters signify a literal, so they get added to
+      ;; QUEUE.
+      ((and `(,x . ,xs) (guard (s-matches-p "^[A-Z]$" x)))
+       (orgtt--build-prefix-formula xs connective-alist (-snoc queue x) connective))
+      ;; If we've go this far and X still hasn't been used, it must be
+      ;; part of a connective, so we add it to the end of the
+      ;; CONNECTIVE parameter which keeps track of this.
+      (`(,x . ,xs) (orgtt--build-prefix-formula xs connective-alist queue (s-append x connective)))
+      ;; If we reach here, that means that the formula was not
+      ;; surrunded in parentheses because the final ')' would have
+      ;; been caught by the corresponding condition above. We'll just
+      ;; make a recursive call with the same state except with FORMULA
+      ;; being ")". This allows formulae to not have to be wrapped in
+      ;; parens but for the parser to still have the niceness of
+      ;; terminating on a specific character.
+      (_ (orgtt--build-prefix-formula ")" connective-alist queue connective)))))
+
+(defun orgtt--replace-vars-with-placeholders (vars formula)
+  "Replace in VARS in FORMULA with placeholders of the form $<index>.
+
+This function is used to do the final work required of making
+FORMULA usable with orgtbl."
+  (let ((case-fold-search nil)
+	(placeholder-map (-map (lambda (x) (cons (car x) (format "$%d" (+ (cdr x) 1))))
+			       (-zip vars (cl-loop for i from 0 below (length vars) collect i)))))
+    (dolist (placeholder placeholder-map formula)
+      (setq formula (s-replace (car placeholder) (cdr placeholder) formula)))))
+
+(defun orgtt--build-orgtbl-formula (formula &optional connective-alist queue connective)
+  "Build an orgtbl formula representation of FORMULA with CONNECTIVE-ALIST, QUEUE and CONNECTIVE."
+  (orgtt--replace-vars-with-placeholders
+   (orgtt--get-vars formula)
+   (orgtt--build-prefix-formula (orgtt--remove-surrounding-parens formula)
+				connective-alist queue connective)))
 
 (defun orgtt--build-table-divider (n)
   "Build a divider for N variables to go between the header and the body."
