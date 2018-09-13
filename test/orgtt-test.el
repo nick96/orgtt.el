@@ -33,6 +33,11 @@
   (should (equal (orgtt--get-vars "(A . B) + -(C <+> D -> (E <-> F))")
 		 '("A" "B" "C" "D" "E" "F"))))
 
+(ert-deftest orgtt-test-skip-parened-region ()
+  "Test skipping over a parenthesised region."
+  (should (equal (orgtt--skip-parened-region (s-split "" "(A + B)" t)) nil))
+  (should (equal (orgtt--skip-parened-region (s-split "" "(A -> B) + C)" t))
+					     (s-split "" " + C)" t))))
 
 ;; Test the functions called for the default connectives
 (ert-deftest orgtt-test-negate-boolean ()
@@ -52,7 +57,7 @@
   (should-not (orgtt--land nil t))
   (should-not (orgtt--land nil nil)))
 
-
+(ert-deftest orgtt-test-land-binary ()
   (should (orgtt--land 1 1))
   (should-not (orgtt--land 1 0))
   (should-not (orgtt--land 0 1))
@@ -114,8 +119,6 @@
   (should (orgtt--xor 0 1))
   (should-not (orgtt--xor 0 0)))
 
-;; Test the functions for parsing the formula in its string form
-
 ;; Test the function used to build the truth table
 (ert-deftest orgtt-test-build-table-header ()
   "Test `orgtt--build-table-header'."
@@ -134,19 +137,77 @@
   (should (equal (orgtt--build-table-body '("A" "B") t)
 		 (s-join "\n" '("| 0 | 0 | |" "| 0 | 1 | |" "| 1 | 0 | |" "| 1 | 1 | |")))))
 
+(ert-deftest orgtt-test-build-prefix-formula-unnested ()
+  "Test `orgtt--build-prefix-formula' with unnested formulae."
+  (should (equal (orgtt--build-prefix-formula "A + B")
+		 "(orgtt--lor A B)"))
+  (should (equal (orgtt--build-prefix-formula "A -> B")
+		 "(orgtt--implication A B)"))
+  (should (equal (orgtt--build-prefix-formula "B . A")
+		 "(orgtt--land B A)")))
+
+(ert-deftest orgtt-test-build-prefix-formula-nested ()
+  "Test `orgtt--build-prefix-formula' with nested formulae."
+  (should (equal (orgtt--build-prefix-formula "A -> (B -> C)")
+		 "(orgtt--implication A (orgtt--implication B C))"))
+  (should (equal (orgtt--build-prefix-formula "A + (B . (C -> (A <-> (D <+> B))))")
+		 "(orgtt--lor A (orgtt--land B (orgtt--implication C (orgtt--biimplication A (orgtt--xor D B)))))"))
+  (should (equal (orgtt--build-prefix-formula "(A . B) + ((- B) . (- A))")
+		 "(orgtt--lor (orgtt--land A B) (orgtt--land (orgtt--negate B) (orgtt--negate A)))"))
+  (should (equal (orgtt--build-prefix-formula "(A . B) + ((-B) . (-A))")
+		 "(orgtt--lor (orgtt--land A B) (orgtt--land (orgtt--negate B) (orgtt--negate A)))"))
+  (should (equal (orgtt--build-prefix-formula "(A.B)+((-B).(-A))")
+		 "(orgtt--lor (orgtt--land A B) (orgtt--land (orgtt--negate B) (orgtt--negate A)))"))
+  (should (equal (orgtt--build-prefix-formula "(-(A + B)) . (-(B -> (-A)))")
+		 ("(orgtt--land (orgtt--negate (orgtt--lor A B)) (orgtt--negate (orgtt--implication B (orgtt--negate A))))"))))
+
+(ert-deftest orgtt-test-build-prefix-formula-unwrapped-negation ()
+  "Test `orgtt--build-prefix-formula' with negations not wrapped in parens."
+  :expected-result :failed
+  (should (equal (orgtt--build-prefix-formula "A + -B")
+		 "(orgtt--lor A (orgtt--negation B))"))
+  (should (equal (orgtt--build-prefix-formula "-(A . B) + -(B -> A)")
+		 "(orgtt--lor (orgtt--negate (orgtt--land A B)) (orgtt--negate (orgtt--implication B A)))")))
+
+(ert-deftest orgtt-test-build-prefix-formula-parens ()
+  "Test `orgtt--build-prefix-formula' with formulae wrapped in parens."
+  :expected-result :failed
+  (should (equal (orgtt--build-prefix-formula "(A -> (B -> C))")
+		 "(orgtt--implication A (orgtt--implication B C))"))
+  (should (equal (orgtt--build-prefix-formula "(A + (B . (C -> (A <-> (D <+> B)))))")
+		 "(orgtt--lor A (orgtt--land B (orgtt--implication C (orgtt--biimplication A (orgtt--xor D B)))))"))
+  (should (equal (orgtt--build-prefix-formula "((A . B) + ((-B) . (-A)))")
+		 "(orgtt--lor (orgtt--land A B) (orgtt--land (orgtt--negate B) (orgtt--negate A)))")))
+
+(ert-deftest orgtt-test-replace-vars-with-placeholders ()
+  "Test `orgtt-test-replace-vars-with-placeholders'."
+  (should (equal (orgtt--replace-vars-with-placeholders '("A" "B") "(orgtt--lor A B)")
+		 "(orgtt--lor $1 $2)"))
+  (should (equal (orgtt--replace-vars-with-placeholders '("A" "B") "(orgtt--implication A B)")
+		 "(orgtt--implication $1 $2)"))
+  (should (equal (orgtt--replace-vars-with-placeholders '("A" "B") "(orgtt--land B A)")
+		 "(orgtt--land $2 $1)"))
+  (should (equal (orgtt--replace-vars-with-placeholders '("A" "B" "C")
+							"(orgtt--implication A (orgtt--implication B C))")
+		 "(orgtt--implication $1 (orgtt--implication $2 $3))"))
+  (should (equal (orgtt--replace-vars-with-placeholders '("A" "B" "C" "D")
+							"(orgtt--lor A (orgtt--land B (orgtt--implication C (orgtt--biimplication A (orgtt--xor D B)))))")
+		 "(orgtt--lor $1 (orgtt--land $2 (orgtt--implication $3 (orgtt--biimplication $1 (orgtt--xor $4 $2)))))"))
+  (should (equal (orgtt--replace-vars-with-placeholders '("A" "B") "(orgtt--lor (orgtt--land A B) (orgtt--land (orgtt--negate B) (orgtt--negate A)))")
+		 "(orgtt--lor (orgtt--land $1 $2) (orgtt--land (orgtt--negate $2) (orgtt--negate $1)))")))
+
 (ert-deftest orgtt-test-build-orgtbl-formula-unnested ()
   "Test `orgtt--build-orgtbl-formula' with un-nested formulae."
-  :expected-result :failed
   (should (equal (orgtt--build-orgtbl-formula "A + B")
-		 "'(orgtt--lor $1 $2"))
+		 "'(orgtt--lor $1 $2)"))
   (should (equal (orgtt--build-orgtbl-formula "A -> B")
 		 "'(orgtt--implication $1 $2)"))
   (should (equal (orgtt--build-orgtbl-formula "B . A")
 		 "'(orgtt--land $2 $1)")))
 
+
 (ert-deftest orgtt-test-build-orgtbl-formula-nested ()
   "Test `orgtt--build-orgtbl-formula' with nested formulae."
-  :expected-result :failed
   (should (equal (orgtt--build-orgtbl-formula "A -> (B -> C)")
 		 "'(orgtt--implication $1 (orgtt--implication $2 $3))"))
   (should (equal (orgtt--build-orgtbl-formula "(A + (B . (C -> (A <-> (D <+> B)))))")
@@ -156,7 +217,6 @@
 
 (ert-deftest orgtt--test-build-orgtbl-formula-binary ()
   "Test `orgtt--build-orgtbl-formula' with binary representation enabled."
-  :expected-result :failed
   (should (equal (orgtt--build-orgtbl-formula "A -> (B -> C)" t)
 		 "'(orgtt--implication $1 (orgtt--implication $2 $3));N"))
   (should (equal (orgtt--build-orgtbl-formula "(A + (B . (C -> (A <-> (D <+> B)))))" t)
@@ -166,7 +226,6 @@
 
 (ert-deftest orgtt-test-build-orgtbl-formula-custom-connectives ()
   "Test `orgtt--build-orgtbl-formula' using custom connectives."
-  :expected-result :failed
   (let* ((land (lambda (x y) (orgtt--land x y)))
 	 (lor (lambda (x y) (orgtt--lor x y)))
 	 (neg (lambda (x) (orgtt--negate x)))
@@ -191,7 +250,6 @@
 
 (ert-deftest orgtt-test-create-table-and-solve ()
   "Test `orgtt--create-table-and-solve'."
-  :expected-result :failed
   (let ((table1 (test-helper-get-solved-table 1))
 	(table2 (test-helper-get-solved-table 2))
 	(table3 (test-helper-get-solved-table 3))
