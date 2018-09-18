@@ -47,8 +47,9 @@
 
 (ert-deftest orgtt-test-negate-binary ()
   "Tests for negation with 1s and 0s."
-  (should-not (orgtt--negate 1))
-  (should (orgtt--negate 0)))
+  (should (equal 0 (orgtt--negate 1)))
+  (should (equal 1 (orgtt--negate 0))))
+
 
 (ert-deftest orgtt-test-land-boolean ()
   "Tests for logical and with booleans."
@@ -58,10 +59,10 @@
   (should-not (orgtt--land nil nil)))
 
 (ert-deftest orgtt-test-land-binary ()
-  (should (orgtt--land 1 1))
-  (should-not (orgtt--land 1 0))
-  (should-not (orgtt--land 0 1))
-  (should-not (orgtt--land 1 0)))
+  (should (equal 1 (orgtt--land 1 1)))
+  (should (equal 0 (orgtt--land 1 0)))
+  (should (equal 0 (orgtt--land 0 1)))
+  (should (equal 0 (orgtt--land 1 0))))
 
 (ert-deftest orgtt-test-lor-boolean ()
   "Tests for logical or with booleans."
@@ -72,10 +73,10 @@
 
 (ert-deftest orgtt-test-lor-binary ()
   "Tests for logical or with 1s and 0s."
-  (should (orgtt--lor 1 1))
-  (should (orgtt--lor 1 0))
-  (should (orgtt--lor 0 1))
-  (should-not (orgtt--lor 0 0)))
+  (should (equal 1 (orgtt--lor 1 1)))
+  (should (equal 1 (orgtt--lor 1 0)))
+  (should (equal 1 (orgtt--lor 0 1)))
+  (should (equal 0 (orgtt--lor 0 0))))
 
 (ert-deftest orgtt-test-implication-boolean ()
   "Tests for material implication with booleans."
@@ -86,10 +87,10 @@
 
 (ert-deftest orgtt-test-implication-binary ()
   "Tests for material implication with 1s and 0s"
-  (should (orgtt--implication 1 1))
-  (should-not (orgtt--implication 1 0))
-  (should (orgtt--implication 0 1))
-  (should (orgtt--implication 0 0)))
+  (should (equal 1 (orgtt--implication 1 1)))
+  (should (equal 0 (orgtt--implication 1 0)))
+  (should (equal 1 (orgtt--implication 0 1)))
+  (should (equal 1 (orgtt--implication 0 0))))
 
 (ert-deftest orgtt-test-biimplication-boolean ()
   "Tests for biimplication with booleans."
@@ -100,10 +101,10 @@
 
 (ert-deftest orgtt-test-biimplication-binary ()
   "Tests for biimplication with 1s and 0s."
-  (should (orgtt--biimplication 1 1))
-  (should-not (orgtt--biimplication 1 0))
-  (should-not (orgtt--biimplication 0 1))
-  (should (orgtt--biimplication 0 0)))
+  (should (equal 1 (orgtt--biimplication 1 1)))
+  (should (equal 0 (orgtt--biimplication 1 0)))
+  (should (equal 0 (orgtt--biimplication 0 1)))
+  (should (equal 1 (orgtt--biimplication 0 0))))
 
 (ert-deftest orgtt-test-xor-boolean ()
   "Tests for exclusive or with booleans."
@@ -114,10 +115,10 @@
 
 (ert-deftest orgtt-test-xor-binary ()
   "Tests for exclusive or with 1s and 0s."
-  (should-not (orgtt--xor 1 1))
-  (should (orgtt--xor 1 0))
-  (should (orgtt--xor 0 1))
-  (should-not (orgtt--xor 0 0)))
+  (should (equal 0 (orgtt--xor 1 1)))
+  (should (equal 1 (orgtt--xor 1 0)))
+  (should (equal 1 (orgtt--xor 0 1)))
+  (should (equal 0 (orgtt--xor 0 0))))
 
 ;; Test the function used to build the truth table
 (ert-deftest orgtt-test-build-table-header ()
@@ -215,13 +216,15 @@
   (should (equal (orgtt--build-orgtbl-formula "(A . B) + (-B . -A)")
 		 "'(orgtt--lor (orgtt--land $1 $2) (orgtt--land (orgtt--negate $2) (orgtt--negate $1)))")))
 
-(ert-deftest orgtt--test-build-orgtbl-formula-binary ()
+(ert-deftest orgtt-test-build-orgtbl-formula-binary ()
   "Test `orgtt--build-orgtbl-formula' with binary representation enabled."
   (should (equal (orgtt--build-orgtbl-formula "A -> (B -> C)" t)
 		 "'(orgtt--implication $1 (orgtt--implication $2 $3));N"))
   (should (equal (orgtt--build-orgtbl-formula "(A + (B . (C -> (A <-> (D <+> B)))))" t)
-		 "'(orgtt--lor $1 (orgtt--land $2 (orgtt--implication $3 (orgtt--biimplication $1 (orgtt--xor $4 $2)))));N"))
-  (should (equal (orgtt--build-orgtbl-formula "(A . B) + (-B . -A)" t)
+		 "'(orgtt--lor $1 (orgtt--land $2 (orgtt--implication $3 (orgtt--biimplication $1 (orgtt--xor $4 $2)))));N")))
+
+(ert-deftest orgtt-test-build-orgtbl-formula-negation ()
+  (should (equal (orgtt--build-orgtbl-formula "(A . B) + ((- B) . (- A))" t)
 		 "'(orgtt--lor (orgtt--land $1 $2) (orgtt--land (orgtt--negate $2) (orgtt--negate $1)));N")))
 
 (ert-deftest orgtt-test-build-orgtbl-formula-custom-connectives ()
@@ -232,9 +235,9 @@
 	 (connective-alist '(("+" . land)
 			     ("-" . lor)
 			     ("~" . neg))))
-    (should (equal (orgtt--build-orgtbl-formula "A + B + C" connective-alist)
+    (should (equal (orgtt--build-orgtbl-formula "A + (B + C)" connective-alist)
 		   "'(land $1 (land $2 $3))"))
-    (should (equal (orgtt--build-orgtbl-formula "~A - ~B" connective-alist)
+    (should (equal (orgtt--build-orgtbl-formula "(~A) - (~B)" connective-alist)
 		   "'(lor (neg $1) (neg $2))"))))
 
 (ert-deftest orgtt-test-build-orgtbl-formula-custom-connectives-lambda ()
@@ -254,10 +257,10 @@
 	(table2 (test-helper-get-solved-table 2))
 	(table3 (test-helper-get-solved-table 3))
 	(table4 (test-helper-get-solved-table 4)))
-    (should (equal (orgtt--create-table-and-solve "A + B") table1))
-    (should (equal (orgtt--create-table-and-solve "A -> (B . C)") table2))
-    (should (equal (orgtt--create-table-and-solve "A + B" t) table3))
-    (should (equal (orgtt--create-table-and-solve "A -> (B . C)" t) table4))))
+    (should (string-equal (orgtt--create-table-and-solve "A + B") table1))
+    (should (string-equal (orgtt--create-table-and-solve "A -> (B . C)") table2))
+    (should (string-equal (orgtt--create-table-and-solve "A + B" t) table3))
+    (should (string-equal (orgtt--create-table-and-solve "A -> (B . C)" t) table4)))/)
 
 (ert-deftest orgtt-test-create-table ()
   "Test `orgtt--create-table'."
