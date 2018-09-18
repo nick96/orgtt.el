@@ -314,14 +314,19 @@ FORMULA usable with orgtbl."
 
 (defun orgtt--create-table-and-solve (formula &optional binaryp)
   "Create the fully completed truth table for FORMULA as a string, in binary if BINARYP."
-  (let ((vars (orgtt--get-vars formula)))
-    (orgtt--org-table-align-string
-     (s-join "\n" (list (orgtt--build-table-header vars formula)
-			(orgtt--build-table-divider (length vars))
-			(orgtt--build-table-body vars binaryp)
-			(format "TBLFM: $%d=%s"
-				(+ (length vars) 1)
-				(orgtt--build-orgtbl-formula formula)))))))
+  (let* ((vars (orgtt--get-vars formula))
+	(table (orgtt--org-table-align-string
+		(s-join "\n"
+			(list (orgtt--build-table-header vars formula)
+			      (orgtt--build-table-divider (length vars))
+			      (orgtt--build-table-body vars binaryp)))))
+	(orgtbl-formula (format "#+TBLFM: $%d=%s" (+ (length vars) 1)
+				(orgtt--build-orgtbl-formula formula binaryp)))
+	(tbl (s-concat table orgtbl-formula)))
+    (with-temp-buffer
+      (insert tbl)
+      (org-table-calc-current-TBLFM)
+      (buffer-substring-no-properties (point-min) (point-max)))))
 
 ;;;###autoload
 (defun orgtt-create-table (formula)
