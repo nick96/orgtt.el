@@ -86,9 +86,9 @@ using t or nil then we will get funny return values."
 	 (string-equal x "t"))
 	((and (numberp x) (or (= x 1) (= x 0))) (= x 1))
 	(t (user-error (s-join " " '("You are trying to convert something that is"
-				"not the strings 't' or 'nil', the digits 1 or 0, or a"
-				"boolean.  I have stopped because the results could be"
-				"confusing"))))))
+				     "not the strings 't' or 'nil', the digits 1 or 0, or a"
+				     "boolean.  I have stopped because the results could be"
+				     "confusing"))))))
 
 (defun orgtt--bool-to-binary (b)
   "Convert a boolean value B to binary (i.e. t -> 1, nil -> 0)."
@@ -117,7 +117,7 @@ using t or nil then we will get funny return values."
 (defun orgtt--get-vars (formula)
   "Get the variables in FORMULA."
   (-distinct (-sort 's-less-p (s-split "" (cl-remove-if #'(lambda (c) (or (< c 65) (> c 90)))
-					     (s-upcase formula))
+							(s-upcase formula))
 				       t))))
 
 (defun orgtt--to-binary-list (n)
@@ -137,12 +137,11 @@ using t or nil then we will get funny return values."
 (defmacro defun-connective (name args &optional docstring &rest body)
   "Define a connective with NAME and ARGS, BODY defines what it does."
   (declare (indent defun))
-  (let ((binaryp-exp (-concat '(and)
-			      (mapcar #'(lambda (x)
-					  `(and (numberp ,x) (memq ,x '(0 1))))
-				      args)))
-	(booleanised-args (mapcar #'(lambda (x)
-				      `(,x (orgtt--to-bool ,x)))
+  (let ((binaryp-exp
+	 (-concat '(and)
+		  (mapcar #'(lambda (x) `(and (numberp ,x) (memq ,x '(0 1))))
+			  args)))
+	(booleanised-args (mapcar #'(lambda (x) `(,x (orgtt--to-bool ,x)))
 				  args)))
     `(defun ,name ,args
        ,docstring
@@ -190,12 +189,12 @@ using t or nil then we will get funny return values."
 
 (defun orgtt--build-table-body (vars &optional binaryp)
   "Build the body for a truth tables with VARS in binary depending BINARYP."
-    (s-join "\n" (mapcar #'(lambda (xs)
-			     (s-concat (orgtt--build-table-row
-					(if binaryp
-					    (mapcar #'orgtt--bool-to-binary xs)
+  (s-join "\n" (mapcar #'(lambda (xs)
+			   (s-concat (orgtt--build-table-row
+				      (if binaryp
+					  (mapcar #'orgtt--bool-to-binary xs)
 					xs)) " |"))
-			 (orgtt--get-valuations (length vars)))))
+		       (orgtt--get-valuations (length vars)))))
 
 (defun orgtt--convert-to-prefix-notation (formula)
   "Convert FORMULA to prefix notation."
@@ -214,11 +213,11 @@ using t or nil then we will get funny return values."
 		     formula
 		   (s-split "" formula t))))
     (pcase formula
-		 (`("(" . ,xs) (orgtt--skip-parened-region xs (+ paren-count 1)))
-		 (`(")" . ,xs) (if (= paren-count 1)
-				   xs
-				 (orgtt--skip-parened-region xs (- paren-count 1))))
-		 (`(,_ . ,xs) (orgtt--skip-parened-region xs paren-count)))))
+      (`("(" . ,xs) (orgtt--skip-parened-region xs (+ paren-count 1)))
+      (`(")" . ,xs) (if (= paren-count 1)
+			xs
+		      (orgtt--skip-parened-region xs (- paren-count 1))))
+      (`(,_ . ,xs) (orgtt--skip-parened-region xs paren-count)))))
 
 (defun orgtt--remove-surrounding-parens (formula)
   "Remove parentheses surroundign FORMULA."
@@ -229,7 +228,7 @@ using t or nil then we will get funny return values."
 	   formula))
 	((listp formula)
 	 (if (and (s-equals-p (-first-item formula) "(")
-		 (s-equals-p (-last-item formula) ")"))
+		  (s-equals-p (-last-item formula) ")"))
 	     (-slice formula 1 (- (length formula) 2))
 	   formula))))
 
@@ -313,9 +312,9 @@ FORMULA usable with orgtbl."
 (defun orgtt--build-orgtbl-formula (formula &optional binaryp connective-alist queue connective)
   "Build an orgtbl formula representation of FORMULA with BINARYP, CONNECTIVE-ALIST, QUEUE and CONNECTIVE."
   (format "'%s%s" (orgtt--replace-vars-with-placeholders
-		 (orgtt--get-vars formula)
-		 (orgtt--build-prefix-formula (orgtt--remove-surrounding-parens formula)
-					      connective-alist queue connective))
+		   (orgtt--get-vars formula)
+		   (orgtt--build-prefix-formula (orgtt--remove-surrounding-parens formula)
+						connective-alist queue connective))
 	  (if binaryp ";N" "")))
 
 (defun orgtt--build-table-divider (n)
@@ -333,14 +332,14 @@ FORMULA usable with orgtbl."
 (defun orgtt--create-table-and-solve (formula &optional binaryp)
   "Create the fully completed truth table for FORMULA as a string, in binary if BINARYP."
   (let* ((vars (orgtt--get-vars formula))
-	(table (orgtt--org-table-align-string
-		(s-join "\n"
-			(list (orgtt--build-table-header vars formula)
-			      (orgtt--build-table-divider (length vars))
-			      (orgtt--build-table-body vars binaryp)))))
-	(orgtbl-formula (format "#+TBLFM: $%d=%s" (+ (length vars) 1)
-				(orgtt--build-orgtbl-formula formula binaryp)))
-	(tbl (s-concat table orgtbl-formula)))
+	 (table (orgtt--org-table-align-string
+		 (s-join "\n"
+			 (list (orgtt--build-table-header vars formula)
+			       (orgtt--build-table-divider (length vars))
+			       (orgtt--build-table-body vars binaryp)))))
+	 (orgtbl-formula (format "#+TBLFM: $%d=%s" (+ (length vars) 1)
+				 (orgtt--build-orgtbl-formula formula binaryp)))
+	 (tbl (s-concat table orgtbl-formula)))
     (with-temp-buffer
       (insert tbl)
       (org-table-calc-current-TBLFM)
