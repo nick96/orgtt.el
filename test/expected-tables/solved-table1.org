@@ -1,7 +1,7 @@
 | A   | B   | A + B |
 |-----+-----+-------|
 | nil | nil | nil   |
-| nil | t   | nil   |
-| t   | nil | nil   |
+| nil | t   | t     |
+| t   | nil | t     |
 | t   | t   | t     |
-#+TBLFM: $3='(orgtt--land $1 $2)
+#+TBLFM: $3='(orgtt--lor $1 $2)
