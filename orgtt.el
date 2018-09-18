@@ -293,12 +293,13 @@ FORMULA usable with orgtbl."
     (dolist (placeholder placeholder-map formula)
       (setq formula (s-replace (car placeholder) (cdr placeholder) formula)))))
 
-(defun orgtt--build-orgtbl-formula (formula &optional connective-alist queue connective)
-  "Build an orgtbl formula representation of FORMULA with CONNECTIVE-ALIST, QUEUE and CONNECTIVE."
-  (orgtt--replace-vars-with-placeholders
-   (orgtt--get-vars formula)
-   (orgtt--build-prefix-formula (orgtt--remove-surrounding-parens formula)
-				connective-alist queue connective)))
+(defun orgtt--build-orgtbl-formula (formula &optional binaryp connective-alist queue connective)
+  "Build an orgtbl formula representation of FORMULA with BINARYP, CONNECTIVE-ALIST, QUEUE and CONNECTIVE."
+  (format "'%s%s" (orgtt--replace-vars-with-placeholders
+		 (orgtt--get-vars formula)
+		 (orgtt--build-prefix-formula (orgtt--remove-surrounding-parens formula)
+					      connective-alist queue connective))
+	  (if binaryp ";N" "")))
 
 (defun orgtt--build-table-divider (n)
   "Build a divider for N variables to go between the header and the body."
