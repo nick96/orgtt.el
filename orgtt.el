@@ -134,31 +134,48 @@ using t or nil then we will get funny return values."
     (org-table-align)
     (buffer-substring-no-properties (point-min) (point-max))))
 
-(defun orgtt--negate (x)
-  "Negate X."
-  (not (orgtt--to-bool x)))
+(defmacro defun-connective (name args &optional docstring &rest body)
+  "Define a connective with NAME and ARGS, BODY defines what it does."
+  (declare (indent defun))
+  (let ((binaryp-exp (-concat '(and)
+			      (mapcar #'(lambda (x)
+					  `(and (numberp ,x) (memq ,x '(0 1))))
+				      args)))
+	(booleanised-args (mapcar #'(lambda (x)
+				      `(,x (orgtt--to-bool ,x)))
+				  args)))
+    `(defun ,name ,args
+       ,docstring
+       (let ((binaryp ,binaryp-exp))
+	 (let (,@booleanised-args)
+	   (if binaryp
+	       (orgtt--bool-to-binary ,@body)
+	     ,@body))))))
 
-(defun orgtt--lor (x y)
+
+(defun-connective orgtt--negate (x)
+  "Negate x"
+  (not x))
+
+(defun-connective orgtt--lor (x y)
   "Logical or between X and Y."
-  (or (orgtt--to-bool x) (orgtt--to-bool y)))
+  (or x y))
 
-(defun orgtt--land (x y)
+(defun-connective orgtt--land (x y)
   "Logical and between X and Y."
-  (and (orgtt--to-bool x) (orgtt--to-bool y)))
+  (and x y))
 
-(defun orgtt--implication (x y)
+(defun-connective orgtt--implication (x y)
   "X implies Y."
-  (or (orgtt--negate x) (orgtt--to-bool y)))
+  (or (orgtt--negate x) y))
 
-(defun orgtt--biimplication (x y)
+(defun-connective orgtt--biimplication (x y)
   "X iff Y."
   (and (orgtt--implication x y) (orgtt--implication y x)))
 
-(defun orgtt--xor (x y)
+(defun-connective orgtt--xor (x y)
   "Exclusive or between X and Y."
-  (let ((x (orgtt--to-bool x))
-	(y (orgtt--to-bool y)))
-    (or (and (not x) y) (and x (not y)))))
+  (or (and (not x) y) (and x (not y))))
 
 (defun orgtt--build-table-row (elements)
   "Build a table row for `org-mode' containing ELEMENTS."
