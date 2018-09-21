@@ -9,5 +9,7 @@
 (depends-on "dash")
 
 (development
+ (depends-on "projectile")
  (depends-on "s")
+ (depends-on "f")
  (depends-on "ert-runner"))
