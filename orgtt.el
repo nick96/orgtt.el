@@ -129,14 +129,20 @@ using t or nil then we will get funny return values."
 
 (defun orgtt--org-table-align-string (s)
   "Align a string representation of a table S using `org-table-align'."
-  (with-temp-buffer
-    (insert s)
-    (org-table-align)
-    (buffer-substring-no-properties (point-min) (point-max))))
+  (s-chomp (with-temp-buffer
+	     (insert s)
+	     (goto-char (point-min))
+	     (org-table-align)
+	     (buffer-substring-no-properties (point-min) (point-max)))))
 
-(defmacro defun-connective (name args &optional docstring &rest body)
+(defun orgtt--insert-no-move (s)
+  "Insert a string S into the current buffer but keep the cursor where it is."
+  (save-excursion (insert s)))
+
+(defmacro orgtt-defun-connective (name args &optional docstring &rest body)
   "Define a connective with NAME and ARGS, BODY defines what it does."
-  (declare (indent defun))
+  (declare (indent defun)
+	   (debug t))
   (let ((binaryp-exp
 	 (-concat '(and)
 		  (mapcar #'(lambda (x) `(and (numberp ,x) (memq ,x '(0 1))))
@@ -152,27 +158,27 @@ using t or nil then we will get funny return values."
 	     ,@body))))))
 
 
-(defun-connective orgtt--negate (x)
+(orgtt-defun-connective orgtt--negate (x)
   "Negate x"
   (not x))
 
-(defun-connective orgtt--lor (x y)
+(orgtt-defun-connective orgtt--lor (x y)
   "Logical or between X and Y."
   (or x y))
 
-(defun-connective orgtt--land (x y)
+(orgtt-defun-connective orgtt--land (x y)
   "Logical and between X and Y."
   (and x y))
 
-(defun-connective orgtt--implication (x y)
+(orgtt-defun-connective orgtt--implication (x y)
   "X implies Y."
   (or (orgtt--negate x) y))
 
-(defun-connective orgtt--biimplication (x y)
+(orgtt-defun-connective orgtt--biimplication (x y)
   "X iff Y."
   (and (orgtt--implication x y) (orgtt--implication y x)))
 
-(defun-connective orgtt--xor (x y)
+(orgtt-defun-connective orgtt--xor (x y)
   "Exclusive or between X and Y."
   (or (and (not x) y) (and x (not y))))
 
@@ -269,7 +275,6 @@ Currently this function will not work if FROMULA is surrounded in parentheses."
       ;; the arguments in the appropriate order.
       (`(")" . ,xs) (progn
 		      (let ((connective-fn (cdr (assoc connective connective-alist))))
-			(message "%s" connective-fn)
 			(if (not connective-fn)
 			    (user-error "No known connective for %S, check your formula"
 					connective)
@@ -339,10 +344,13 @@ FORMULA usable with orgtbl."
 			       (orgtt--build-table-body vars binaryp)))))
 	 (orgtbl-formula (format "#+TBLFM: $%d=%s" (+ (length vars) 1)
 				 (orgtt--build-orgtbl-formula formula binaryp)))
-	 (tbl (s-concat table orgtbl-formula)))
+	 (tbl (s-concat table "\n" orgtbl-formula)))
     (with-temp-buffer
       (insert tbl)
+      (goto-char (point-max))
       (org-table-calc-current-TBLFM)
+      (goto-char (point-min))
+      (org-table-align)
       (buffer-substring-no-properties (point-min) (point-max)))))
 
 ;;;###autoload
