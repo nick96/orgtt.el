@@ -5,16 +5,13 @@
 ;;; Code:
 
 (require 'f)
-;; I know this is gross but I need a way of being able to easily refer
-;; to the absolute file name so that tests can be run interactively in
-;; emacs and from cask.
-(require 'projectile)
 
+(defconst test-helper-test-dir (f-parent (f-this-file)))
 
 (defun test-helper-get-table (n)
   "Get contents of file 'expected-tables/tabel$N.org'."
-  (let ((table-name (format (f-join (projectile-project-root)
-				    "test/expected-tables/table%d.org")
+  (let ((table-name (format (f-join test-helper-test-dir
+				    "expected-tables/table%d.org")
 			    n)))
     (s-chomp (with-temp-buffer
 	       (insert-file-contents table-name)
@@ -22,8 +19,8 @@
 
 (defun test-helper-get-solved-table (n)
   "Get contents of file 'expected-tables/solved-tabel$N.org'."
-  (let ((table-name (format (f-join (projectile-project-root)
-				    "test/expected-tables/solved-table%d.org")
+  (let ((table-name (format (f-join test-helper-test-dir
+				    "expected-tables/solved-table%d.org")
 			    n)))
     (s-chomp (with-temp-buffer
 	       (insert-file-contents table-name)
